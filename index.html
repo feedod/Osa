@@ -45,7 +45,7 @@
 
     <!-- Основной результат поиска -->
     <article x-show="isDone && !isLoading">
-      <div x-show="errorMessage" role="alert" x-text="errorMessage"></div>
+      <div x-show="errorMessage" x-text="errorMessage"></div>
       <div x-show="!errorMessage && summaryText" x-text="summaryText"></div>
       <p x-show="!errorMessage && !summaryText">Ничего не найдено</p>
     </article>
