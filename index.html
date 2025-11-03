@@ -1,1 +1,302 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Osa - Быстрый поиск по открытым источникам</title>
 
+  <!-- Подключение минималистичных стилей Pico.css -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+</head>
+<body>
+
+  <main class="container" x-data="osaApp">
+
+    <!-- Заголовок приложения -->
+    <hgroup>
+      <h1>Osa</h1>
+      <p>Быстрый поиск по открытым источникам</p>
+    </hgroup>
+
+    <!-- Поле ввода поискового запроса -->
+    <input
+      type="search"
+      x-model.trim="query"
+      :placeholder="placeholder"
+      :disabled="loading"
+      autocomplete="off"
+      required
+      @keydown.enter.prevent="search"
+      aria-label="Введите запрос"
+    >
+
+    <!-- Блок отображения результата -->
+    <div x-show="done">
+
+      <!-- Сообщение об ошибке -->
+      <template x-if="error">
+        <p>
+          <strong>Ошибка:</strong>
+          <span x-text="error"></span>
+        </p>
+      </template>
+
+      <!-- Отображение краткой сводки -->
+      <template x-if="!error && summary">
+        <p x-text="summary"></p>
+      </template>
+
+      <!-- Сообщение при отсутствии результата -->
+      <template x-if="!error && !summary">
+        <mark>Ничего не найдено</mark>
+      </template>
+
+    </div>
+
+  </main>
+
+  <!-- Подключение Alpine.js -->
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js" defer></script>
+
+  <!-- Подключение Axios для HTTP запросов -->
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js" defer></script>
+
+
+  <script>
+    /**
+     * Абстрактный источник информации
+     * @class
+     */
+    class Source {
+      /**
+       * @param {string} name Имя источника
+       */
+      constructor(name) {
+        this.name = name;
+      }
+
+      /**
+       * Метод загрузки данных
+       * Должен быть реализован в потомках
+       * @abstract
+       */
+      async fetch() {
+        throw new Error('Метод fetch() должен быть переопределён');
+      }
+    }
+
+
+    /**
+     * Источник: Википедия
+     * @class
+     * @extends Source
+     */
+    class WikipediaSource extends Source {
+
+      constructor() {
+        super('Wikipedia');
+      }
+
+      /**
+       * Разбивает текст на предложения
+       * @param {string} text Исходный текст
+       * @returns {string[]} Массив предложений
+       */
+      splitSentences(text) {
+        const sentences = text.split(/([.!?])\s+/);
+        const result = [];
+
+        for (let i = 0; i < sentences.length - 1; i += 2) {
+          result.push((sentences[i] + sentences[i + 1]).trim());
+        }
+
+        return result.slice(0, 20);
+      }
+
+      /**
+       * Получает данные из Википедии по запросу
+       * @param {string} query Поисковый запрос
+       * @returns {Promise<Object|null>} Найденные факты или null
+       */
+      async fetch(query) {
+        try {
+          const response = await axios.get(
+            `https://ru.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`
+          );
+
+          const data = response.data;
+          if (!data?.extract) return null;
+
+          return {
+            claims: this.splitSentences(data.extract),
+            weight: 3,
+            service: this.name
+          };
+
+        } catch {
+          return null;
+        }
+      }
+    }
+
+
+    /**
+     * Оценка фактов и формирование итоговой сводки
+     * @class
+     */
+    class FactEvaluator {
+
+      /**
+       * Рассчитывает схожесть предложений
+       * @param {string} a Первая строка
+       * @param {string} b Вторая строка
+       * @returns {number} Число от 0 до 1
+       */
+      similarity(a, b) {
+        const wordsA = new Set(a.toLowerCase().split(/\s+/));
+        const wordsB = new Set(b.toLowerCase().split(/\s+/));
+
+        if (!wordsA.size || !wordsB.size) return 0;
+
+        const common = [...wordsA].filter(w => wordsB.has(w));
+        return common.length / Math.max(wordsA.size, wordsB.size);
+      }
+
+      /**
+       * Создаёт краткий вывод на основе найденных данных
+       * @param {Array} results Данные всех источников
+       * @param {number} maxLength Ограничение длины текста
+       * @returns {string} Сводка
+       */
+      createSummary(results, maxLength = 300) {
+        const facts = [];
+
+        results.filter(Boolean).forEach(result => {
+          result.claims.forEach(claim => {
+            if (claim.length > 200) claim = claim.slice(0, 197) + '…';
+            if (!facts.some(f => this.similarity(f, claim) > 0.7)) {
+              facts.push(claim);
+            }
+          });
+        });
+
+        let summary = '';
+
+        for (const fact of facts) {
+          if ((summary + ' ' + fact).length > maxLength) break;
+          summary += (summary ? ' ' : '') + fact;
+        }
+
+        return summary;
+      }
+    }
+
+
+    /**
+     * Логика приложения Osa
+     * @class
+     */
+    class OsaApp {
+
+      constructor() {
+
+        /**
+         * Ввод пользователя
+         * @type {string}
+         */
+        this.query = '';
+
+        /**
+         * Текст в placeholder
+         * @type {string}
+         */
+        this.placeholder = 'Введите запрос...';
+
+        /**
+         * Флаг загрузки
+         * @type {boolean}
+         */
+        this.loading = false;
+
+        /**
+         * Готовность результата
+         * @type {boolean}
+         */
+        this.done = false;
+
+        /**
+         * Сообщение ошибки
+         * @type {string}
+         */
+        this.error = '';
+
+        /**
+         * Краткая сводка по итогам поиска
+         * @type {string}
+         */
+        this.summary = '';
+
+        /**
+         * Список источников для поиска
+         * @type {Source[]}
+         */
+        this.sources = [
+          new WikipediaSource()
+        ];
+
+        /**
+         * Обработчик найденных фактов
+         * @type {FactEvaluator}
+         */
+        this.evaluator = new FactEvaluator();
+      }
+
+      /**
+       * Выполняет поиск по Enter
+       * @returns {void}
+       */
+      async search() {
+        if (!this.query) return;
+
+        this.error = '';
+        this.summary = '';
+        this.done = false;
+        this.loading = true;
+
+        const userQuery = this.query;
+        this.query = '';
+        this.placeholder = 'Ищу…';
+
+        try {
+
+          const results = await Promise.all(
+            this.sources.map(src => src.fetch(userQuery))
+          );
+
+          this.summary = this.evaluator.createSummary(results);
+
+        } catch (error) {
+
+          console.error(error);
+          this.error = 'Ошибка при выполнении поиска. Повторите попытку.';
+
+        } finally {
+
+          this.loading = false;
+          this.done = true;
+          this.placeholder = userQuery || 'Введите запрос...';
+        }
+      }
+    }
+
+
+    /**
+     * Инициализация Alpine.js и запуск приложения
+     */
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('osaApp', () => new OsaApp());
+    });
+  </script>
+
+</body>
+</html>
