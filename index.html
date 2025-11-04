@@ -52,7 +52,7 @@
 
     <!-- Источники данных и дополнительная информация -->
     <article x-show="isDone && !isLoading && !errorMessage && summaryText">
-      <p>Источники</p>
+      <p><strong>Источники</strong></p>
       <section>
         <ol>
           <template x-for="source in sources" :key="source.name">
@@ -71,8 +71,8 @@
       <!-- Дополнительная информация -->
       <details>
         <summary>Дополнительная информация</summary>
-        <div>Время выполнения: <span x-text="elapsedTime + ' мс'"></span></div>
-        <div>Длина сводки: <span x-text="summaryText.length + ' символов'"></span></div>
+        <div>Время выполнения: <ins x-text="elapsedTime + ' мс'"></ins></div>
+        <div>Длина сводки: <ins x-text="summaryText.length + ' символов'"></ins></div>
       </details>
     </article>
   </div>
