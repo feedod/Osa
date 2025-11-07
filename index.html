@@ -1,538 +1,545 @@
 <!DOCTYPE html>
 <html lang="ru">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OSA</title>
-    <meta name="description" content="Быстрый поиск по открытым источникам" />
-    <link rel="icon" href="/favicon.ico" type="image/x-icon" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
-  </head>
-  <body>
-    <main class="container" x-data="osaApp" x-init="init()">
-      <hgroup>
-        <h1>OSA</h1>
-        <p>Быстрый поиск по открытым источникам</p>
-      </hgroup>
-      <form role="search" @submit.prevent="performSearch">
-        <input id="searchInput" type="search" x-model.trim="searchQuery" placeholder="Введите запрос" :disabled="isLoading" autocomplete="off" required aria-label="Поле для ввода запроса" />
-        <button type="submit" :disabled="isLoading">Найти</button>
-      </form>
-      <section>
-        <template x-if="isLoading">
-          <article aria-busy="true"></article>
-        </template>
-        <article x-show="isDone && !isLoading" aria-live="polite">
-          <div x-show="errorMessage" x-text="errorMessage"></div>
-          <div x-show="!errorMessage && summaryText" x-html="summaryText"></div>
-          <center x-show="!errorMessage && !summaryText">Ничего не найдено</center>
-        </article>
-        <article x-show="isDone && !isLoading && !errorMessage && summaryText">
-          <p><strong>Источники</strong></p>
-          <ol>
-            <template x-for="source in filteredSources" :key="source.name">
-              <li>
-                <template x-if="source.url">
-                  <a :href="source.url" target="_blank" rel="noopener noreferrer" x-text="source.url"></a>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>OSA</title>
+        <meta name="description" content="Быстрый поиск по открытым источникам" />
+        <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+    </head>
+    <body>
+        <main class="container" x-data="osaApp" x-init="init()">
+            <hgroup>
+                <h1>OSA</h1>
+                <p>Быстрый поиск по открытым источникам</p>
+            </hgroup>
+            <form role="search" @submit.prevent="performSearch">
+                <input id="searchInput" type="search" x-model.trim="searchQuery" placeholder="Введите запрос" :disabled="isLoading" autocomplete="off" required aria-label="Поле для ввода запроса" />
+                <button type="submit" :disabled="isLoading">Найти</button>
+            </form>
+            <section>
+                <template x-if="isLoading">
+                    <article aria-busy="true"></article>
                 </template>
-                <template x-if="!source.url">
-                  <span x-text="source.name"></span>
-                </template>
-              </li>
-            </template>
-          </ol>
-          <details>
-            <summary>Дополнительная информация</summary>
-            <div>Время выполнения: <span x-text="elapsedTime + ' мс'"></span></div>
-            <div>Длина сводки: <span x-text="summaryLength + ' символов'"></span></div>
-            <div>Источников: <span x-text="sourceCount"></span></div>
-            <div>Уровень достоверности: <span x-text="confidenceLevel"></span></div>
-          </details>
-        </article>
-      </section>
-    </main>
-    <!-- JS библиотеки -->
-    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js" defer></script>
-    <script>
-      /**
-       * Базовый класс источника данных.
-       */
-      class DataSource {
-        /**
-         * @param {string} name Название источника.
-         * @param {Object} options Настройки источника.
-         */
-        constructor(name, options = {}) {
-          if (!name) throw new Error("DataSource должен иметь имя");
+                <article x-show="isDone && !isLoading" aria-live="polite">
+                    <div x-show="errorMessage" x-text="errorMessage"></div>
+                    <div x-show="!errorMessage && summaryText" x-html="summaryText"></div>
+                    <center x-show="!errorMessage && !summaryText">Ничего не найдено</center>
+                </article>
+                <article x-show="isDone && !isLoading && !errorMessage && summaryText">
+                    <p><strong>Источники</strong></p>
+                    <template x-if="filteredSources && filteredSources.length">
+                        <ol>
+                            <template x-for="source in filteredSources" :key="source.url || source.name">
+                                <li>
+                                    <template x-if="source.url">
+                                        <a :href="source.url" target="_blank" rel="noopener noreferrer" x-text="source.url"></a>
+                                    </template>
+                                    <template x-if="!source.url">
+                                        <span x-text="source.name"></span>
+                                    </template>
+                                </li>
+                            </template>
+                        </ol>
+                    </template>
+                    <details>
+                        <summary>Дополнительная информация</summary>
+                        <div>Время выполнения: <span x-text="elapsedTime + ' мс'"></span></div>
+                        <div>Длина сводки: <span x-text="summaryLength + ' символов'"></span></div>
+                        <div>Источников: <span x-text="sourceCount"></span></div>
+                        <div>Уровень достоверности: <span x-text="confidenceLevel"></span></div>
+                    </details>
+                </article>
+            </section>
+        </main>
+        <!-- JS библиотеки -->
+        <script src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js" defer></script>
+        <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js" defer></script>
+        <script>
+            /**
+             * Базовый класс источника данных.
+             */
+            class DataSource {
+                /**
+                 * @param {string} name Название источника.
+                 * @param {Object} options Настройки источника.
+                 */
+                constructor(name, options = {}) {
+                    if (!name) throw new Error("DataSource должен иметь имя");
 
-          this.name = name;
-          this.retries = options.retries ?? 3;
-          this.timeout = options.timeout ?? 7000;
-          this.ttl = options.ttl ?? 300000; // Время жизни кэша, мс
-          this.maxCacheSize = options.maxCacheSize ?? 2000;
-          this.headers = options.headers ?? {};
-          this.cache = new Map();
-          this.activeRequests = new Map();
-        }
-
-        /**
-         * Получение данных из кэша.
-         * @param {string} key Ключ кэша.
-         * @return {?Object} Данные из кэша или null.
-         */
-        getCache(key) {
-          const entry = this.cache.get(key);
-          if (!entry) return null;
-          if (Date.now() - entry.timestamp > this.ttl) {
-            this.cache.delete(key);
-            return null;
-          }
-          this.cache.delete(key);
-          this.cache.set(key, entry); // Обновляем порядок LRU
-          return entry.data;
-        }
-
-        /**
-         * Сохранение данных в кэш.
-         * @param {string} key Ключ кэша.
-         * @param {Object} data Данные для кэширования.
-         */
-        setCache(key, data) {
-          if (this.cache.size >= this.maxCacheSize) {
-            const firstKey = this.cache.keys().next().value;
-            this.cache.delete(firstKey);
-          }
-          this.cache.set(key, { timestamp: Date.now(), data });
-        }
-
-        /**
-         * Получение JSON с обработкой таймаута и retry.
-         * @param {string} url URL запроса.
-         * @param {Object} config Конфигурация axios.
-         * @return {Promise<Object|null>} Данные JSON или null.
-         */
-        async fetchJson(url, config = {}) {
-          const cached = this.getCache(url);
-          if (cached) return cached;
-
-          if (this.activeRequests.has(url)) {
-            return this.activeRequests.get(url);
-          }
-
-          let attempt = 0;
-          const baseDelay = 300;
-
-          const promise = (async () => {
-            while (attempt <= this.retries) {
-              try {
-                const cancelSource = axios.CancelToken.source();
-                const timer = setTimeout(() => cancelSource.cancel(`Timeout ${this.timeout}ms`), this.timeout);
-
-                const response = await axios.get(url, {
-                  headers: this.headers,
-                  timeout: this.timeout,
-                  cancelToken: cancelSource.token,
-                  ...config,
-                });
-
-                clearTimeout(timer);
-
-                if (response.status !== 200) {
-                  throw new Error(`HTTP ${response.status}`);
+                    this.name = name;
+                    this.retries = options.retries ?? 3;
+                    this.timeout = options.timeout ?? 7000;
+                    this.ttl = options.ttl ?? 300000; // Время жизни кэша, мс
+                    this.maxCacheSize = options.maxCacheSize ?? 2000;
+                    this.headers = options.headers ?? {};
+                    this.cache = new Map();
+                    this.activeRequests = new Map();
                 }
 
-                const data = response.data;
-                this.setCache(url, data);
-                this.activeRequests.delete(url);
-                return data;
-              } catch (err) {
-                attempt++;
-                if (axios.isCancel(err)) {
-                  console.warn(`[${this.name}] Запрос отменен: ${err.message}`);
-                } else {
-                  console.warn(`[${this.name}] Попытка ${attempt} не удалась: ${err.message}`);
+                /**
+                 * Получение данных из кэша.
+                 * @param {string} key Ключ кэша.
+                 * @return {?Object} Данные из кэша или null.
+                 */
+                getCache(key) {
+                    const entry = this.cache.get(key);
+                    if (!entry) return null;
+                    if (Date.now() - entry.timestamp > this.ttl) {
+                        this.cache.delete(key);
+                        return null;
+                    }
+                    this.cache.delete(key);
+                    this.cache.set(key, entry); // Обновляем порядок LRU
+                    return entry.data;
                 }
 
-                if (attempt > this.retries) {
-                  this.activeRequests.delete(url);
-                  return null;
+                /**
+                 * Сохранение данных в кэш.
+                 * @param {string} key Ключ кэша.
+                 * @param {Object} data Данные для кэширования.
+                 */
+                setCache(key, data) {
+                    if (this.cache.size >= this.maxCacheSize) {
+                        const firstKey = this.cache.keys().next().value;
+                        this.cache.delete(firstKey);
+                    }
+                    this.cache.set(key, { timestamp: Date.now(), data });
                 }
 
-                const delay = baseDelay * Math.pow(2, attempt);
-                await new Promise((resolve) => setTimeout(resolve, delay));
-              }
+                /**
+                 * Получение JSON с обработкой таймаута и retry.
+                 * @param {string} url URL запроса.
+                 * @param {Object} config Конфигурация axios.
+                 * @return {Promise<Object|null>} Данные JSON или null.
+                 */
+                async fetchJson(url, config = {}) {
+                    const cached = this.getCache(url);
+                    if (cached) return cached;
+
+                    if (this.activeRequests.has(url)) {
+                        return this.activeRequests.get(url);
+                    }
+
+                    let attempt = 0;
+                    const baseDelay = 300;
+
+                    const promise = (async () => {
+                        try {
+                            while (attempt <= this.retries) {
+                                try {
+                                    const cancelSource = axios.CancelToken.source();
+                                    const timer = setTimeout(() => cancelSource.cancel(`Timeout ${this.timeout}ms`), this.timeout);
+
+                                    const response = await axios.get(url, {
+                                        headers: this.headers,
+                                        timeout: this.timeout,
+                                        cancelToken: cancelSource.token,
+                                        ...config,
+                                    });
+
+                                    clearTimeout(timer);
+
+                                    if (response.status !== 200) {
+                                        throw new Error(`HTTP ${response.status}`);
+                                    }
+
+                                    const data = response.data;
+                                    this.setCache(url, data);
+                                    return data;
+                                } catch (err) {
+                                    attempt++;
+
+                                    if (attempt > this.retries) {
+                                        return null;
+                                    }
+
+                                    const delay = baseDelay * Math.pow(2, attempt);
+                                    await new Promise((resolve) => setTimeout(resolve, delay));
+                                }
+                            }
+                            return null;
+                        } finally {
+                            this.activeRequests.delete(url);
+                        }
+                    })();
+
+                    this.activeRequests.set(url, promise);
+                    return promise;
+                }
+
+                /**
+                 * Абстрактный метод получения данных.
+                 * @param {string} query Запрос.
+                 */
+                async fetch(query) {
+                    throw new Error("Метод fetch() должен быть переопределён в наследнике");
+                }
             }
-            return null;
-          })();
 
-          this.activeRequests.set(url, promise);
-          return promise;
-        }
+            /**
+             * Источник DuckDuckGo Instant Answer.
+             */
+            class DuckDuckGoSource extends DataSource {
+                constructor() {
+                    super("DuckDuckGo");
+                }
 
-        /**
-         * Абстрактный метод получения данных.
-         * @param {string} query Запрос.
-         */
-        async fetch(query) {
-          throw new Error("Метод fetch() должен быть переопределён в наследнике");
-        }
-      }
+                /**
+                 * Получение данных из DuckDuckGo Instant Answer API.
+                 * @param {string} query Запрос.
+                 * @return {Promise<Object|null>}
+                 */
+                async fetch(query) {
+                    if (!query) return null;
 
-      /**
-       * Источник DuckDuckGo Instant Answer.
-       */
-      class DuckDuckGoSource extends DataSource {
-        constructor() {
-          super("DuckDuckGo");
-        }
+                    try {
+                        const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
+                        const data = await this.fetchJson(url);
 
-        /**
-         * Получение данных из DuckDuckGo Instant Answer API.
-         * @param {string} query Запрос.
-         * @return {Promise<Object|null>}
-         */
-        async fetch(query) {
-          if (!query) return null;
+                        // Если нет полезного ответа — возвращаем null
+                        if (!data || data.Type === "D" || !data.AbstractText) {
+                            return null;
+                        }
 
-          try {
-            const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
-            const data = await this.fetchJson(url);
+                        const title = data.Heading || query;
+                        const sourceUrl = data.AbstractURL || data.AbstractSource ? data.AbstractURL || `https://duckduckgo.com/?q=${encodeURIComponent(query)}` : `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
 
-            // Если нет полезного ответа — возвращаем null
-            if (!data || data.Type === "D" || !data.AbstractText) {
-              return null;
+                        this.url = sourceUrl;
+
+                        return {
+                            claims: this.extractSentences(data.AbstractText, 15),
+                            name: this.name,
+                            url: this.url,
+                            extra: {
+                                title,
+                                source: data.AbstractSource || "DuckDuckGo",
+                                infobox: data.Infobox ? this.parseInfobox(data.Infobox) : null,
+                            },
+                        };
+                    } catch (err) {
+                        console.error(`[DuckDuckGo] Ошибка fetch: ${err.message}`);
+                        return null;
+                    }
+                }
+
+                /**
+                 * Разбивает текст на предложения.
+                 * @param {string} text Текст.
+                 * @param {number} maxSentences Максимальное количество предложений.
+                 * @return {Array<string>}
+                 */
+                extractSentences(text, maxSentences = 15) {
+                    if (!text) return [];
+                    const sentences = text.split(/([.!?])\s+/);
+                    const result = [];
+                    for (let i = 0; i < sentences.length - 1; i += 2) {
+                        const sentence = (sentences[i] + (sentences[i + 1] || "")).trim().replace(/\s+/g, " ");
+                        if (sentence) result.push(sentence);
+                    }
+                    return result.slice(0, maxSentences);
+                }
+
+                /**
+                 * Парсит Infobox из DuckDuckGo (если есть).
+                 * @param {Object} infobox
+                 * @return {Object|null}
+                 */
+                parseInfobox(infobox) {
+                    if (!infobox || !infobox.content) return null;
+
+                    const info = {};
+                    infobox.content.forEach((item) => {
+                        if (item.label && item.value) {
+                            info[item.label] = item.value;
+                        }
+                    });
+                    return Object.keys(info).length > 0 ? info : null;
+                }
             }
 
-            const title = data.Heading || query;
-            const sourceUrl = data.AbstractURL || data.AbstractSource ? data.AbstractURL || `https://duckduckgo.com/?q=${encodeURIComponent(query)}` : `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
+            /**
+             * Класс для оценки фактов и генерации сводки.
+             */
+            class FactEvaluator {
+                constructor({ stopWords = null, sourceWeights = null } = {}) {
+                    this.wordIndex = new Map();
+                    this.stopWords = stopWords || new Set(["и", "в", "на", "с", "что", "к", "по", "для", "не", "как", "но", "за", "the", "a", "an", "of", "in", "on", "and", "or", "but", "with"]);
+                    this.sourceWeights = sourceWeights || {};
+                }
 
-            this.url = sourceUrl;
+                /**
+                 * Нормализация текста: очистка от стоп-слов и разбиение на слова.
+                 * @param {string} text
+                 * @return {Array<string>}
+                 */
+                normalizeText(text) {
+                    if (!text) return [];
+                    return text
+                        .toLowerCase()
+                        .replace(/[^\wа-яё]/gi, " ")
+                        .split(/\s+/)
+                        .filter((w) => w && !this.stopWords.has(w));
+                }
 
-            return {
-              claims: this.extractSentences(data.AbstractText, 15),
-              name: this.name,
-              url: this.url,
-              extra: {
-                title,
-                source: data.AbstractSource || "DuckDuckGo",
-                infobox: data.Infobox ? this.parseInfobox(data.Infobox) : null,
-              },
-            };
-          } catch (err) {
-            console.error(`[DuckDuckGo] Ошибка fetch: ${err.message}`);
-            return null;
-          }
-        }
+                /**
+                 * Рассчет оценки факта.
+                 * @param {Set<string>} words
+                 * @param {?string} source
+                 * @return {number}
+                 */
+                calculateScore(words, source = null) {
+                    const weight = source && this.sourceWeights[source] ? this.sourceWeights[source] : 1.0;
+                    return words.size * weight;
+                }
 
-        /**
-         * Разбивает текст на предложения.
-         * @param {string} text Текст.
-         * @param {number} maxSentences Максимальное количество предложений.
-         * @return {Array<string>}
-         */
-        extractSentences(text, maxSentences = 15) {
-          if (!text) return [];
-          const sentences = text.split(/([.!?])\s+/);
-          const result = [];
-          for (let i = 0; i < sentences.length - 1; i += 2) {
-            const sentence = (sentences[i] + (sentences[i + 1] || "")).trim().replace(/\s+/g, " ");
-            if (sentence) result.push(sentence);
-          }
-          return result.slice(0, maxSentences);
-        }
+                /**
+                 * Проверка дублирования факта.
+                 * @param {Set<string>} words
+                 * @return {boolean}
+                 */
+                isDuplicate(words) {
+                    if (!words.size) return true;
+                    let matches = 0;
+                    words.forEach((w) => {
+                        if (this.wordIndex.has(w)) matches++;
+                    });
+                    return matches / words.size > 0.5;
+                }
 
-        /**
-         * Парсит Infobox из DuckDuckGo (если есть).
-         * @param {Object} infobox
-         * @return {Object|null}
-         */
-        parseInfobox(infobox) {
-          if (!infobox || !infobox.content) return null;
+                /**
+                 * Добавление слов факта в индекс.
+                 * @param {Set<string>} words
+                 */
+                addToIndex(words) {
+                    words.forEach((w) => this.wordIndex.set(w, (this.wordIndex.get(w) || 0) + 1));
+                }
 
-          const info = {};
-          infobox.content.forEach((item) => {
-            if (item.label && item.value) {
-              info[item.label] = item.value;
+                /**
+                 * Создает сводку из массива результатов.
+                 * @param {Array<Object>} results
+                 * @param {number} maxLength
+                 * @return {string}
+                 */
+                createSummary(results, maxLength = 300) {
+                    const allFacts = [];
+                    results.filter(Boolean).forEach((r) => {
+                        if (r?.claims)
+                            r.claims.forEach((cl) => {
+                                if (cl) allFacts.push({ fact: cl, source: r.name });
+                            });
+                    });
+
+                    const scored = allFacts
+                        .map((i) => {
+                            const words = new Set(this.normalizeText(i.fact));
+                            return { ...i, words, score: this.calculateScore(words, i.source) };
+                        })
+                        .sort((a, b) => b.score - a.score);
+
+                    this.wordIndex.clear();
+                    let summary = "";
+                    const used = [];
+
+                    for (const i of scored) {
+                        if (!i.words.size) continue;
+                        if (this.isDuplicate(i.words)) continue;
+
+                        const conflict = this.calculateConflict(
+                            i.words,
+                            used.map((f) => f.words)
+                        );
+                        if (conflict > 0.5) continue;
+
+                        if ((summary + " " + i.fact).length > maxLength) break;
+
+                        summary += (summary ? " " : "") + i.fact;
+                        this.addToIndex(i.words);
+                        used.push(i);
+                    }
+
+                    return summary;
+                }
+
+                /**
+                 * Рассчет конфликта между фактом и существующими фактами.
+                 * @param {Set<string>} factWords
+                 * @param {Array<Set<string>>} existingFacts
+                 * @return {number}
+                 */
+                calculateConflict(factWords, existingFacts) {
+                    if (!existingFacts.length) return 0;
+                    let conflicts = 0;
+                    for (const words of existingFacts) {
+                        const inter = new Set([...factWords].filter((x) => words.has(x)));
+                        if (inter.size / factWords.size < 0.3) conflicts++;
+                    }
+                    return conflicts / existingFacts.length;
+                }
+
+                /**
+                 * Рассчет доверия к фактам.
+                 * @param {Array<Object>} results
+                 * @return {number} 0–1
+                 */
+                calculateConfidence(results) {
+                    if (!Array.isArray(results) || !results.length) return 0;
+
+                    let totalScore = 0;
+                    let totalWeight = 0;
+
+                    results.forEach((r) => {
+                        if (!r?.claims) return;
+                        const w = this.sourceWeights[r.name] || 1.0;
+                        r.claims.forEach((cl) => {
+                            const words = new Set(this.normalizeText(cl));
+                            totalScore += words.size * w;
+                            totalWeight += w;
+                        });
+                    });
+
+                    if (totalWeight === 0) return 0;
+                    return Math.min(1, totalScore / totalWeight / 10);
+                }
+
+                /**
+                 * Генерация сводки и метаданных.
+                 * @param {Array<Object>} results
+                 * @param {number} maxLength
+                 * @return {Object} {summaryText, confidenceLevel, sourceCount, summaryLength}
+                 */
+                summarizeResults(results, maxLength = 300) {
+                    const summaryText = this.createSummary(results, maxLength);
+                    const confidenceLevel = this.calculateConfidence(results);
+                    const sourceCount = results.filter((r) => r && r.claims && r.claims.length).length;
+                    const summaryLength = summaryText.length;
+
+                    return {
+                        summaryText,
+                        confidenceLevel: (confidenceLevel * 100).toFixed(0) + "%",
+                        sourceCount,
+                        summaryLength,
+                    };
+                }
             }
-          });
-          return Object.keys(info).length > 0 ? info : null;
-        }
-      }
 
-      /**
-       * Класс для оценки фактов и генерации сводки.
-       */
-      class FactEvaluator {
-        constructor({ stopWords = null, sourceWeights = null } = {}) {
-          this.wordIndex = new Map();
-          this.stopWords = stopWords || new Set(["и", "в", "на", "с", "что", "к", "по", "для", "не", "как", "но", "за", "the", "a", "an", "of", "in", "on", "and", "or", "but", "with"]);
-          this.sourceWeights = sourceWeights || {};
-        }
+            /**
+             * Основной класс приложения OSA.
+             */
+            class OsaAppClass {
+                constructor({ sources = [new DuckDuckGoSource()], evaluator = new FactEvaluator() } = {}) {
+                    this.searchQuery = "";
+                    this.isLoading = false;
+                    this.isDone = false;
+                    this.errorMessage = "";
+                    this.summaryText = "";
+                    this.filteredSources = [];
+                    this.confidenceLevel = "";
+                    this.sourceCount = 0;
+                    this.summaryLength = 0;
+                    this.elapsedTime = 0;
+                    this.sources = sources;
+                    this.evaluator = evaluator;
+                    this.cache = new Map();
+                }
 
-        /**
-         * Нормализация текста: очистка от стоп-слов и разбиение на слова.
-         * @param {string} text
-         * @return {Array<string>}
-         */
-        normalizeText(text) {
-          if (!text) return [];
-          return text
-            .toLowerCase()
-            .replace(/[^\wа-яё]/gi, " ")
-            .split(/\s+/)
-            .filter((w) => w && !this.stopWords.has(w));
-        }
+                resetState() {
+                    this.errorMessage = "";
+                    this.summaryText = "";
+                    this.filteredSources = [];
+                    this.confidenceLevel = "";
+                    this.sourceCount = 0;
+                    this.summaryLength = 0;
+                    this.isDone = false;
+                    this.elapsedTime = 0;
+                }
 
-        /**
-         * Рассчет оценки факта.
-         * @param {Set<string>} words
-         * @param {?string} source
-         * @return {number}
-         */
-        calculateScore(words, source = null) {
-          const weight = source && this.sourceWeights[source] ? this.sourceWeights[source] : 1.0;
-          return words.size * weight;
-        }
+                showError(msg) {
+                    this.errorMessage = msg;
+                    this.summaryText = "";
+                    this.isDone = true;
+                    this.isLoading = false;
+                }
 
-        /**
-         * Проверка дублирования факта.
-         * @param {Set<string>} words
-         * @return {boolean}
-         */
-        isDuplicate(words) {
-          if (!words.size) return true;
-          let matches = 0;
-          words.forEach((w) => {
-            if (this.wordIndex.has(w)) matches++;
-          });
-          return matches / words.size > 0.5;
-        }
+                async safeFetchSource(src, query) {
+                    try {
+                        const result = await src.fetch(query);
+                        if (!result) console.warn(`[OsaApp] Источник ${src.name} вернул пустой результат`);
+                        return result;
+                    } catch (err) {
+                        console.error(`[OsaApp] Ошибка источника ${src.name}: ${err.message}`);
+                        return null;
+                    }
+                }
 
-        /**
-         * Добавление слов факта в индекс.
-         * @param {Set<string>} words
-         */
-        addToIndex(words) {
-          words.forEach((w) => this.wordIndex.set(w, (this.wordIndex.get(w) || 0) + 1));
-        }
+                getFallbackSummary(results) {
+                    for (const r of results) {
+                        if (r?.claims?.length) return r.claims[0];
+                    }
+                    return "";
+                }
 
-        /**
-         * Создает сводку из массива результатов.
-         * @param {Array<Object>} results
-         * @param {number} maxLength
-         * @return {string}
-         */
-        createSummary(results, maxLength = 300) {
-          const allFacts = [];
-          results.filter(Boolean).forEach((r) => {
-            if (r?.claims)
-              r.claims.forEach((cl) => {
-                if (cl) allFacts.push({ fact: cl, source: r.name });
-              });
-          });
+                async performSearch() {
+                    const query = this.searchQuery.trim();
+                    if (!query) {
+                        this.showError("Пожалуйста, введите запрос");
+                        return;
+                    }
 
-          const scored = allFacts
-            .map((i) => {
-              const words = new Set(this.normalizeText(i.fact));
-              return { ...i, words, score: this.calculateScore(words, i.source) };
-            })
-            .sort((a, b) => b.score - a.score);
+                    this.resetState();
+                    this.isLoading = true;
+                    const startTime = performance.now();
 
-          this.wordIndex.clear();
-          let summary = "";
-          const used = [];
+                    if (this.cache.has(query)) {
+                        const cached = this.cache.get(query);
 
-          for (const i of scored) {
-            if (!i.words.size) continue;
-            if (this.isDuplicate(i.words)) continue;
+                        this.summaryText = cached.summaryText;
+                        this.elapsedTime = cached.elapsedTime;
+                        this.filteredSources = cached.filteredSources;
+                        this.confidenceLevel = cached.confidenceLevel;
+                        this.sourceCount = cached.sourceCount;
+                        this.summaryLength = cached.summaryLength;
 
-            const conflict = this.calculateConflict(
-              i.words,
-              used.map((f) => f.words)
-            );
-            if (conflict > 0.5) continue;
+                        this.isDone = true;
+                        this.isLoading = false;
+                        return;
+                    }
 
-            if ((summary + " " + i.fact).length > maxLength) break;
+                    try {
+                        const results = await Promise.all(this.sources.map((s) => this.safeFetchSource(s, query)));
+                        const { summaryText, confidenceLevel, sourceCount, summaryLength } = this.evaluator.summarizeResults(results);
 
-            summary += (summary ? " " : "") + i.fact;
-            this.addToIndex(i.words);
-            used.push(i);
-          }
+                        this.summaryText = summaryText || this.getFallbackSummary(results);
+                        this.elapsedTime = Math.round(performance.now() - startTime);
+                        this.cache.set(query, {
+                            summaryText: this.summaryText,
+                            elapsedTime: this.elapsedTime,
+                            filteredSources: this.filteredSources,
+                            confidenceLevel: this.confidenceLevel,
+                            sourceCount: this.sourceCount,
+                            summaryLength: this.summaryLength,
+                        });
 
-          return summary;
-        }
+                        this.filteredSources = results.filter((r) => r);
+                        this.confidenceLevel = confidenceLevel;
+                        this.sourceCount = sourceCount;
+                        this.summaryLength = summaryLength;
+                    } catch (err) {
+                        this.showError("Произошла ошибка при поиске. Попробуйте ещё раз.");
+                        console.error("OsaApp performSearch error:", err);
+                    } finally {
+                        this.isLoading = false;
+                        this.isDone = true;
+                    }
+                }
 
-        /**
-         * Рассчет конфликта между фактом и существующими фактами.
-         * @param {Set<string>} factWords
-         * @param {Array<Set<string>>} existingFacts
-         * @return {number}
-         */
-        calculateConflict(factWords, existingFacts) {
-          if (!existingFacts.length) return 0;
-          let conflicts = 0;
-          for (const words of existingFacts) {
-            const inter = new Set([...factWords].filter((x) => words.has(x)));
-            if (inter.size / factWords.size < 0.3) conflicts++;
-          }
-          return conflicts / existingFacts.length;
-        }
+                init() {}
+            }
 
-        /**
-         * Рассчет доверия к фактам.
-         * @param {Array<Object>} results
-         * @return {number} 0–1
-         */
-        calculateConfidence(results) {
-          if (!Array.isArray(results) || !results.length) return 0;
-
-          let totalScore = 0;
-          let totalWeight = 0;
-
-          results.forEach((r) => {
-            if (!r?.claims) return;
-            const w = this.sourceWeights[r.name] || 1.0;
-            r.claims.forEach((cl) => {
-              const words = new Set(this.normalizeText(cl));
-              totalScore += words.size * w;
-              totalWeight += w;
+            document.addEventListener("alpine:init", () => {
+                Alpine.data("osaApp", () => new OsaAppClass());
             });
-          });
-
-          if (totalWeight === 0) return 0;
-          return Math.min(1, totalScore / totalWeight / 10);
-        }
-
-        /**
-         * Генерация сводки и метаданных.
-         * @param {Array<Object>} results
-         * @param {number} maxLength
-         * @return {Object} {summaryText, confidenceLevel, sourceCount, summaryLength}
-         */
-        summarizeResults(results, maxLength = 300) {
-          const summaryText = this.createSummary(results, maxLength);
-          const confidenceLevel = this.calculateConfidence(results);
-          const sourceCount = results.filter((r) => r && r.claims && r.claims.length).length;
-          const summaryLength = summaryText.length;
-
-          return {
-            summaryText,
-            confidenceLevel: (confidenceLevel * 100).toFixed(0) + "%",
-            sourceCount,
-            summaryLength,
-          };
-        }
-      }
-
-      /**
-       * Основной класс приложения OSA.
-       */
-      class OsaAppClass {
-        constructor({ sources = [new DuckDuckGoSource()], evaluator = new FactEvaluator() } = {}) {
-          this.searchQuery = "";
-          this.isLoading = false;
-          this.isDone = false;
-          this.errorMessage = "";
-          this.summaryText = "";
-          this.elapsedTime = 0;
-          this.sources = sources;
-          this.evaluator = evaluator;
-          this.cache = new Map();
-        }
-
-        resetState() {
-          this.errorMessage = "";
-          this.summaryText = "";
-          this.isDone = false;
-          this.elapsedTime = 0;
-        }
-
-        showError(msg) {
-          this.errorMessage = msg;
-          this.summaryText = "";
-          this.isDone = true;
-          this.isLoading = false;
-        }
-
-        async safeFetchSource(src, query) {
-          try {
-            const result = await src.fetch(query);
-            if (!result) console.warn(`[OsaApp] Источник ${src.name} вернул пустой результат`);
-            return result;
-          } catch (err) {
-            console.error(`[OsaApp] Ошибка источника ${src.name}: ${err.message}`);
-            return null;
-          }
-        }
-
-        getFallbackSummary(results) {
-          for (const r of results) {
-            if (r?.claims?.length) return r.claims[0];
-          }
-          return "";
-        }
-
-        async performSearch() {
-          const query = this.searchQuery.trim();
-          if (!query) {
-            this.showError("Пожалуйста, введите запрос");
-            return;
-          }
-
-          this.resetState();
-          this.isLoading = true;
-          const startTime = performance.now();
-
-          if (this.cache.has(query)) {
-            const cached = this.cache.get(query);
-
-            this.summaryText = cached.summaryText;
-            this.elapsedTime = cached.elapsedTime;
-            this.filteredSources = cached.filteredSources;
-            this.confidenceLevel = cached.confidenceLevel;
-            this.sourceCount = cached.sourceCount;
-            this.summaryLength = cached.summaryLength;
-
-            this.isDone = true;
-            this.isLoading = false;
-            return;
-          }
-
-          try {
-            const results = await Promise.all(this.sources.map((s) => this.safeFetchSource(s, query)));
-            const { summaryText, confidenceLevel, sourceCount, summaryLength } = this.evaluator.summarizeResults(results);
-
-            this.summaryText = summaryText || this.getFallbackSummary(results);
-            this.elapsedTime = Math.round(performance.now() - startTime);
-            this.cache.set(query, {
-              summaryText: this.summaryText,
-              elapsedTime: this.elapsedTime,
-              filteredSources: this.filteredSources,
-              confidenceLevel: this.confidenceLevel,
-              sourceCount: this.sourceCount,
-              summaryLength: this.summaryLength,
-            });
-
-            this.filteredSources = results.filter((r) => r);
-            this.confidenceLevel = confidenceLevel;
-            this.sourceCount = sourceCount;
-            this.summaryLength = summaryLength;
-          } catch (err) {
-            this.showError("Произошла ошибка при поиске. Попробуйте ещё раз.");
-            console.error("OsaApp performSearch error:", err);
-          } finally {
-            this.isLoading = false;
-            this.isDone = true;
-          }
-        }
-
-        init() {}
-      }
-
-      document.addEventListener("alpine:init", () => {
-        Alpine.data("osaApp", () => new OsaAppClass());
-      });
-    </script>
-  </body>
+        </script>
+    </body>
 </html>
