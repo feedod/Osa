@@ -179,47 +179,32 @@
             }
 
             /**
-             * Источник DuckDuckGo Instant Answer.
+             * Источник Wikipedia.
              */
-            class DuckDuckGoSource extends DataSource {
+            class WikipediaSource extends DataSource {
                 constructor() {
-                    super("DuckDuckGo");
+                    super("Wikipedia");
                 }
 
                 /**
-                 * Получение данных из DuckDuckGo Instant Answer API.
+                 * Получение данных из Wikipedia API.
                  * @param {string} query Запрос.
                  * @return {Promise<Object|null>}
                  */
                 async fetch(query) {
                     if (!query) return null;
-
                     try {
-                        const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
+                        const url = `https://ru.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`;
                         const data = await this.fetchJson(url);
-
-                        // Если нет полезного ответа — возвращаем null
-                        if (!data || data.Type === "D" || !data.AbstractText) {
-                            return null;
-                        }
-
-                        const title = data.Heading || query;
-                        const sourceUrl = data.AbstractURL || data.AbstractSource ? data.AbstractURL || `https://duckduckgo.com/?q=${encodeURIComponent(query)}` : `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
-
-                        this.url = sourceUrl;
+                        if (!data || !data.extract) return null;
 
                         return {
-                            claims: this.extractSentences(data.AbstractText, 15),
+                            claims: this.extractSentences(data.extract),
                             name: this.name,
-                            url: this.url,
-                            extra: {
-                                title,
-                                source: data.AbstractSource || "DuckDuckGo",
-                                infobox: data.Infobox ? this.parseInfobox(data.Infobox) : null,
-                            },
+                            url: `https://ru.wikipedia.org/wiki/${encodeURIComponent(data.title)}`,
                         };
                     } catch (err) {
-                        console.error(`[DuckDuckGo] Ошибка fetch: ${err.message}`);
+                        console.error(`[Wikipedia] Ошибка fetch: ${err.message}`);
                         return null;
                     }
                 }
@@ -230,32 +215,15 @@
                  * @param {number} maxSentences Максимальное количество предложений.
                  * @return {Array<string>}
                  */
-                extractSentences(text, maxSentences = 15) {
+                extractSentences(text, maxSentences = 20) {
                     if (!text) return [];
                     const sentences = text.split(/([.!?])\s+/);
                     const result = [];
                     for (let i = 0; i < sentences.length - 1; i += 2) {
-                        const sentence = (sentences[i] + (sentences[i + 1] || "")).trim().replace(/\s+/g, " ");
+                        const sentence = (sentences[i] + sentences[i + 1]).trim().replace(/\s+/g, " ");
                         if (sentence) result.push(sentence);
                     }
                     return result.slice(0, maxSentences);
-                }
-
-                /**
-                 * Парсит Infobox из DuckDuckGo (если есть).
-                 * @param {Object} infobox
-                 * @return {Object|null}
-                 */
-                parseInfobox(infobox) {
-                    if (!infobox || !infobox.content) return null;
-
-                    const info = {};
-                    infobox.content.forEach((item) => {
-                        if (item.label && item.value) {
-                            info[item.label] = item.value;
-                        }
-                    });
-                    return Object.keys(info).length > 0 ? info : null;
                 }
             }
 
@@ -428,7 +396,7 @@
              * Основной класс приложения OSA.
              */
             class OsaAppClass {
-                constructor({ sources = [new DuckDuckGoSource()], evaluator = new FactEvaluator() } = {}) {
+                constructor({ sources = [new WikipediaSource()], evaluator = new FactEvaluator() } = {}) {
                     this.searchQuery = "";
                     this.isLoading = false;
                     this.isDone = false;
@@ -494,12 +462,12 @@
                     if (this.cache.has(query)) {
                         const cached = this.cache.get(query);
 
-                        this.summaryText = cached.summaryText;
-                        this.elapsedTime = cached.elapsedTime;
-                        this.filteredSources = cached.filteredSources;
-                        this.confidenceLevel = cached.confidenceLevel;
-                        this.sourceCount = cached.sourceCount;
-                        this.summaryLength = cached.summaryLength;
+                        this.summaryText = cached.summaryText || "";
+                        this.elapsedTime = cached.elapsedTime || 0;
+                        this.filteredSources = cached.filteredSources || [];
+                        this.confidenceLevel = cached.confidenceLevel || "";
+                        this.sourceCount = cached.sourceCount || 0;
+                        this.summaryLength = cached.summaryLength || 0;
 
                         this.isDone = true;
                         this.isLoading = false;
@@ -512,6 +480,11 @@
 
                         this.summaryText = summaryText || this.getFallbackSummary(results);
                         this.elapsedTime = Math.round(performance.now() - startTime);
+                        this.filteredSources = results.filter((r) => r);
+                        this.confidenceLevel = confidenceLevel;
+                        this.sourceCount = sourceCount;
+                        this.summaryLength = summaryLength;
+
                         this.cache.set(query, {
                             summaryText: this.summaryText,
                             elapsedTime: this.elapsedTime,
@@ -520,11 +493,6 @@
                             sourceCount: this.sourceCount,
                             summaryLength: this.summaryLength,
                         });
-
-                        this.filteredSources = results.filter((r) => r);
-                        this.confidenceLevel = confidenceLevel;
-                        this.sourceCount = sourceCount;
-                        this.summaryLength = summaryLength;
                     } catch (err) {
                         this.showError("Произошла ошибка при поиске. Попробуйте ещё раз.");
                         console.error("OsaApp performSearch error:", err);
