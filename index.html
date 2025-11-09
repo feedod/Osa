@@ -226,83 +226,6 @@
                     return result.slice(0, maxSentences);
                 }
             }
-            
-            /**
- * Источник Pantheon World с расширенной информацией.
- */
-class PantheonSource extends DataSource {
-    constructor() {
-        super("Pantheon", {
-            headers: { "Accept": "application/json" },
-        });
-    }
-
-    /**
-     * Получение данных из Pantheon API.
-     * @param {string} query Запрос.
-     * @return {Promise<Object|null>}
-     */
-    async fetch(query) {
-        if (!query) return null;
-
-        try {
-            const url = `https://pantheon.world/data/api/people?name=${encodeURIComponent(query)}`;
-            const data = await this.fetchJson(url);
-
-            if (!data || !Array.isArray(data.results) || !data.results.length) return null;
-
-            const claims = data.results.map((person) => {
-                const parts = [];
-
-                // Основная информация
-                if (person.name) parts.push(`Имя: ${person.name}`);
-                if (person.alternate_names && person.alternate_names.length) {
-                    parts.push(`Альтернативные имена: ${person.alternate_names.join(", ")}`);
-                }
-                if (person.gender) parts.push(`Пол: ${person.gender}`);
-                if (person.nationality) parts.push(`Национальность: ${person.nationality}`);
-                
-                // Рождение и смерть
-                if (person.birth) {
-                    const birthInfo = [
-                        person.birth.year ? `год ${person.birth.year}` : null,
-                        person.birth.place ? `место ${person.birth.place}` : null,
-                    ].filter(Boolean).join(", ");
-                    parts.push(`Рождение: ${birthInfo}`);
-                }
-                if (person.death) {
-                    const deathInfo = [
-                        person.death.year ? `год ${person.death.year}` : null,
-                        person.death.place ? `место ${person.death.place}` : null,
-                    ].filter(Boolean).join(", ");
-                    parts.push(`Смерть: ${deathInfo}`);
-                }
-
-                // Профессия и достижения
-                if (person.profession && person.profession.length) {
-                    parts.push(`Профессия: ${person.profession.join(", ")}`);
-                }
-                if (person.field && person.field.length) {
-                    parts.push(`Сфера деятельности: ${person.field.join(", ")}`);
-                }
-                if (person.known_for && person.known_for.length) {
-                    parts.push(`Известен за: ${person.known_for.join(", ")}`);
-                }
-
-                return parts.join(". ");
-            }).filter(Boolean);
-
-            return {
-                claims,
-                name: this.name,
-                url: data.results[0].pantheon_url || "https://pantheon.world",
-            };
-        } catch (err) {
-            console.error(`[Pantheon] Ошибка fetch: ${err.message}`);
-            return null;
-        }
-    }
-}
 
             /**
              * Класс для оценки фактов и генерации сводки.
@@ -473,7 +396,7 @@ class PantheonSource extends DataSource {
              * Основной класс приложения OSA.
              */
             class OsaAppClass {
-                constructor({ sources = [new WikipediaSource(), new PantheonSource()], evaluator = new FactEvaluator() } = {}) {
+                constructor({ sources = [new WikipediaSource()], evaluator = new FactEvaluator() } = {}) {
                     this.searchQuery = "";
                     this.isLoading = false;
                     this.isDone = false;
