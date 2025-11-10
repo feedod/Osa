@@ -252,7 +252,9 @@
                         const data = await this.fetchJson(url);
                         if (!data?.items) return null;
 
-                        const matches = data.items.filter((i) => i.title.toLowerCase().includes(query.toLowerCase())).map((i) => i.title + ". " + (i.description || ""));
+                        const matches = data.items
+                            .filter((i) => i.title.toLowerCase().includes(query.toLowerCase()) || (i.description && i.description.toLowerCase().includes(query.toLowerCase())))
+                            .map((i) => i.title + ". " + (i.description || ""));
 
                         return {
                             claims: matches.slice(0, 10),
@@ -527,10 +529,10 @@
 
                         this.summaryText = summaryText || this.getFallbackSummary(results);
                         this.elapsedTime = Math.round(performance.now() - startTime);
-                        this.filteredSources = results.filter((r) => r);
+                        this.filteredSources = results.filter((r) => r && r.claims && r.claims.length);
                         this.confidenceLevel = confidenceLevel;
                         this.sourceCount = sourceCount;
-                        this.summaryLength = summaryLength;
+                        this.summaryLength = this.summaryText.length;
 
                         this.cache.set(query, {
                             summaryText: this.summaryText,
